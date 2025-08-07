@@ -1,4 +1,6 @@
-# 𝕏-Twitter Unfollow non-mutual
+# 𝕏-Twitter Remove non-mutual
+
+# Threads/IG Remove all
 
 Press F12 to open developer tools.
 
