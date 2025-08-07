@@ -1,6 +1,6 @@
-# 𝕏-Twitter Remove non-mutual
+# 𝕏-Twitter Remove non-mutual.
 
-# Threads/IG Remove all
+# Threads/Instagram Remove all.
 
 Press F12 to open developer tools.
 
