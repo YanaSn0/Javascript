@@ -1,27 +1,26 @@
 function unfollowAllSmart() {
   const whitelist = ['yourbestie', 'yanaheat', 'yanasn0w1'];
   let unfollowedCount = 0;
-  let lastSeenCount = 0;
   let scrollAttempts = 0;
   const maxScrollAttempts = 10;
 
-  function randomDelay(min = 1000, max = 2000) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
   function getFollowButtons() {
     return Array.from(document.querySelectorAll('div[role="button"]'))
-      .filter(btn => btn.textContent.trim() === 'Following')
+      .filter(btn => btn.textContent.trim() === 'Following' && btn.querySelector('div'))
       .filter(btn => {
-        const parent = btn.closest('div.x78zum5');
-        const usernameEl = parent?.querySelector('a[href^="/@"] span');
-        const username = usernameEl?.textContent?.trim().toLowerCase();
-        return username && !whitelist.includes(username);
+        const parent = btn.closest('article') || btn.closest('div');
+        let usernameEl = parent?.querySelector('a[href^="/"] span') ||
+                        parent?.querySelector('span') ||
+                        parent?.querySelector('a[href^="/"]');
+        const username = usernameEl?.textContent?.trim().toLowerCase()?.replace('@', '');
+        return !username || !whitelist.includes(username);
       });
   }
 
   function scrollToBottom() {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    const currentHeight = document.body.scrollHeight;
+    window.scrollTo({ top: currentHeight, behavior: 'smooth' });
+    console.log(`🔄 Scrolling to height: ${currentHeight}`);
   }
 
   function clickNext() {
@@ -35,38 +34,39 @@ function unfollowAllSmart() {
 
       scrollToBottom();
       scrollAttempts++;
-      console.log(`🔄 Scrolling to load more... Attempt ${scrollAttempts}`);
-      setTimeout(clickNext, randomDelay(1500, 2500));
+      console.log(`🔄 Scrolling (Attempt ${scrollAttempts}/${maxScrollAttempts})`);
+      setTimeout(clickNext, 2000); // Fixed 2s for scroll
       return;
     }
 
-    scrollAttempts = 0; // Reset scroll attempts when new buttons found
+    scrollAttempts = 0; // Reset scroll attempts
 
     const btn = followButtons[0];
     btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
+    // Click "Following" button
+    console.log(`👆 Clicking "Following" button`);
+    btn.click();
+
+    // Wait 1.5s, then click "Unfollow"
     setTimeout(() => {
-      btn.click(); // Open unfollow dialog
+      const unfollowBtn = Array.from(document.querySelectorAll('div[role="button"]'))
+        .find(el => el.textContent.trim() === 'Unfollow' && el.querySelector('span'));
 
-      setTimeout(() => {
-        const unfollowBtn = Array.from(document.querySelectorAll('div[role="button"]'))
-          .find(el => el.textContent.trim() === 'Unfollow');
+      if (unfollowBtn) {
+        unfollowBtn.click();
+        unfollowedCount++;
+        console.log(`🚫 Unfollowed #${unfollowedCount}`);
+      } else {
+        console.warn(`⚠️ Unfollow button not found`);
+      }
 
-        if (unfollowBtn) {
-          setTimeout(() => {
-            unfollowBtn.click();
-            unfollowedCount++;
-            console.log(`🚫 Unfollowed #${unfollowedCount}`);
-            setTimeout(clickNext, randomDelay());
-          }, randomDelay());
-        } else {
-          console.warn(`⚠️ Unfollow button not found.`);
-          setTimeout(clickNext, randomDelay());
-        }
-      }, randomDelay());
-    }, randomDelay());
+      // Wait 1.5s (total 3s for action), then proceed
+      setTimeout(clickNext, 1500);
+    }, 1500);
   }
 
+  console.log(`🚀 Starting unfollow script for Threads`);
   clickNext();
 }
 
