@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  const username = 'YanaSnow1'; // 🔧 Change this to test different users
+  const normalizedUsername = username.toLowerCase();
+  const startTime = performance.now();
+
   function simulateHover(element) {
     const mouseOverEvent = new MouseEvent('mouseover', {
       bubbles: true,
@@ -22,23 +26,34 @@
   }
 
   function clickFollowButton() {
-    const followBtn = document.querySelector('button[aria-label="Follow @YanaSnow1"]');
-    if (followBtn && followBtn.offsetParent !== null) {
-      followBtn.click();
-      console.log('✅ Follow button clicked');
+    const buttons = document.querySelectorAll('button[aria-label^="Follow @"]');
+    for (const btn of buttons) {
+      const label = btn.getAttribute('aria-label');
+      if (label && label.toLowerCase() === `follow @${normalizedUsername}` && btn.offsetParent !== null) {
+        btn.click();
+        console.log('✅ Follow button clicked');
 
-      // Close the hover card after a short delay
-      setTimeout(() => {
-        const userLink = document.querySelector('a[href="/YanaSnow1"]');
-        if (userLink) simulateUnhover(userLink);
-      }, 500);
-    } else {
-      console.log('❌ Follow button not found or not visible');
+        // Close the hover card after a short delay
+        setTimeout(() => {
+          const userLink = Array.from(document.querySelectorAll('a[href]')).find(link =>
+            link.getAttribute('href').toLowerCase() === `/${normalizedUsername}`
+          );
+          if (userLink) simulateUnhover(userLink);
+
+          const endTime = performance.now();
+          console.log(`⏱️ Total time to follow: ${Math.round(endTime - startTime)} ms`);
+        }, 500);
+        return;
+      }
     }
+    console.log('❌ Follow button not found or not visible');
   }
 
   function openHoverCardAndFollow() {
-    const userLinks = document.querySelectorAll('a[href="/YanaSnow1"]');
+    const userLinks = Array.from(document.querySelectorAll('a[href]')).filter(link =>
+      link.getAttribute('href').toLowerCase() === `/${normalizedUsername}`
+    );
+
     for (const link of userLinks) {
       if (link.offsetParent !== null) {
         simulateHover(link);
