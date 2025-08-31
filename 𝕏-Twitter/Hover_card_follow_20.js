@@ -2,8 +2,9 @@
   'use strict';
 
   const username = 'YanaSn0w1';
+  const normalizedUsername = username.toLowerCase();
   const maxChecks = 20;
-  const scrollOffset = 100; // Adjust this to control vertical offset
+  const scrollOffset = 100;
   let checkedCount = 0;
   let followedCount = 0;
 
@@ -28,8 +29,13 @@
   }
 
   function clickVerifiedFollowersLink() {
-    const verifiedLink = document.querySelector(`a[href="/${username}/verified_followers"]`);
-    if (verifiedLink && verifiedLink.offsetParent !== null) {
+    const links = Array.from(document.querySelectorAll('a[href]'));
+    const verifiedLink = links.find(link =>
+      link.getAttribute('href')?.toLowerCase() === `/${normalizedUsername}/verified_followers` &&
+      link.offsetParent !== null
+    );
+
+    if (verifiedLink) {
       verifiedLink.click();
       console.log('🔍 Verified followers link clicked from hover card');
       setTimeout(() => followFromList(), 2000);
@@ -39,16 +45,19 @@
   }
 
   function openHoverCardAndClickVerified() {
-    const userLinks = document.querySelectorAll(`a[href="/${username}"]`);
-    for (const link of userLinks) {
-      if (link.offsetParent !== null) {
-        simulateHover(link);
-        console.log('✅ Hover card trigger attempted');
-        setTimeout(clickVerifiedFollowersLink, 1500);
-        return;
-      }
+    const links = Array.from(document.querySelectorAll('a[href]'));
+    const userLink = links.find(link =>
+      link.getAttribute('href')?.toLowerCase() === `/${normalizedUsername}` &&
+      link.offsetParent !== null
+    );
+
+    if (userLink) {
+      simulateHover(userLink);
+      console.log('✅ Hover card trigger attempted');
+      setTimeout(clickVerifiedFollowersLink, 1500);
+    } else {
+      console.log('❌ Could not find visible user link');
     }
-    console.log('❌ Could not find visible user link');
   }
 
   function followFromList() {
@@ -69,17 +78,20 @@
       const scrollY = window.scrollY + rect.top - scrollOffset;
       window.scrollTo({ top: scrollY, behavior: 'smooth' });
 
-      const followBtn = cell.querySelector('button[aria-label^="Follow"]');
+      // Try both aria-label and data-testid selectors
+      const followBtn = cell.querySelector('button[aria-label*="Follow"], button[data-testid$="-follow"]');
+
       if (followBtn && followBtn.offsetParent !== null) {
-        const label = followBtn.getAttribute('aria-label');
-        const cellUsername = label.match(/@[\w]+/)?.[0] || '';
+        const label = followBtn.getAttribute('aria-label') || '';
+        const cellUsername = label.match(/@[\w]+/)?.[0]?.toLowerCase() || '';
+
         const currentUser = document.querySelector('button[data-testid="SideNav_AccountSwitcher_Button"] div[data-testid^="UserAvatar-Container-"]')?.getAttribute('data-testid')?.replace('UserAvatar-Container-', '').toLowerCase();
 
-        if (cellUsername.toLowerCase() === `@${currentUser}`) {
+        if (cellUsername === `@${currentUser}`) {
           console.log(`🙅 Skipped self: ${cellUsername}`);
         } else if (label.includes('Following') || label.includes('Blocked')) {
           console.log(`🚫 Skipped: ${label}`);
-        } else if (label.includes('Follow back') || label.startsWith('Follow @')) {
+        } else if (label.includes('Follow back') || label.toLowerCase().includes('follow')) {
           followBtn.click();
           followedCount++;
           console.log(`👤 Followed: ${label}`);
