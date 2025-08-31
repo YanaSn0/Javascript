@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const username = 'yummmycrypotato';
+  const username = 'YanaSn0w1';
   const maxChecks = 20;
   const scrollOffset = 100; // Adjust this to control vertical offset
   let checkedCount = 0;
