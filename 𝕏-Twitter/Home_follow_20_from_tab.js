@@ -1,52 +1,85 @@
 (function () {
   'use strict';
 
-  const username = 'YanaSn0w1';
+  const username = 'yummmycrypotato';
   const maxChecks = 20;
+  const scrollOffset = 100; // Adjust this to control vertical offset
   let checkedCount = 0;
   let followedCount = 0;
 
-  function goToProfileFromHome() {
-    const profileLink = document.querySelector(`a[href="/${username}"]`);
-    if (profileLink && profileLink.offsetParent !== null) {
-      profileLink.click();
-      console.log(`🚀 Navigating to @${username}'s profile`);
-      setTimeout(goToVerifiedFollowers, 2000);
-    } else {
-      console.log(`❌ Profile link for @${username} not found on home`);
-    }
+  function simulateHover(element) {
+    const mouseOverEvent = new MouseEvent('mouseover', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+    element.dispatchEvent(mouseOverEvent);
+    console.log('🟡 Hover simulated on:', element);
   }
 
-  function goToVerifiedFollowers() {
+  function simulateUnhover(element) {
+    const mouseOutEvent = new MouseEvent('mouseout', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+    element.dispatchEvent(mouseOutEvent);
+    console.log('🔵 Unhover simulated to close card');
+  }
+
+  function clickVerifiedFollowersLink() {
     const verifiedLink = document.querySelector(`a[href="/${username}/verified_followers"]`);
     if (verifiedLink && verifiedLink.offsetParent !== null) {
       verifiedLink.click();
-      console.log('🔍 Opening verified followers list');
+      console.log('🔍 Verified followers link clicked from hover card');
       setTimeout(() => followFromList(), 2000);
     } else {
-      console.log('❌ Verified followers link not found');
+      console.log('❌ Verified followers link not found or not visible');
     }
+  }
+
+  function openHoverCardAndClickVerified() {
+    const userLinks = document.querySelectorAll(`a[href="/${username}"]`);
+    for (const link of userLinks) {
+      if (link.offsetParent !== null) {
+        simulateHover(link);
+        console.log('✅ Hover card trigger attempted');
+        setTimeout(clickVerifiedFollowersLink, 1500);
+        return;
+      }
+    }
+    console.log('❌ Could not find visible user link');
   }
 
   function followFromList() {
     const cells = Array.from(document.querySelectorAll('[data-testid="cellInnerDiv"]'));
     if (cells.length === 0) {
       console.log('❌ No user cells found');
-      return clickBackTwice();
+      return clickBackOnce();
     }
 
     function processNext() {
       if (checkedCount >= maxChecks || checkedCount >= cells.length) {
         console.log(`✅ Done. Checked ${checkedCount}, followed ${followedCount}`);
-        return clickBackTwice();
+        return clickBackOnce();
       }
 
       const cell = cells[checkedCount];
-      const followBtn = cell.querySelector('button[aria-label^="Follow"]');
+      const rect = cell.getBoundingClientRect();
+      const scrollY = window.scrollY + rect.top - scrollOffset;
+      window.scrollTo({ top: scrollY, behavior: 'smooth' });
 
+      const followBtn = cell.querySelector('button[aria-label^="Follow"]');
       if (followBtn && followBtn.offsetParent !== null) {
         const label = followBtn.getAttribute('aria-label');
-        if (label.includes('Follow back') || label.startsWith('Follow @')) {
+        const cellUsername = label.match(/@[\w]+/)?.[0] || '';
+        const currentUser = document.querySelector('button[data-testid="SideNav_AccountSwitcher_Button"] div[data-testid^="UserAvatar-Container-"]')?.getAttribute('data-testid')?.replace('UserAvatar-Container-', '').toLowerCase();
+
+        if (cellUsername.toLowerCase() === `@${currentUser}`) {
+          console.log(`🙅 Skipped self: ${cellUsername}`);
+        } else if (label.includes('Following') || label.includes('Blocked')) {
+          console.log(`🚫 Skipped: ${label}`);
+        } else if (label.includes('Follow back') || label.startsWith('Follow @')) {
           followBtn.click();
           followedCount++;
           console.log(`👤 Followed: ${label}`);
@@ -57,33 +90,22 @@
         console.log('🚫 No followable button in cell');
       }
 
-      cell.scrollIntoView({ behavior: 'smooth', block: 'end' });
       checkedCount++;
-
       setTimeout(processNext, 1000);
     }
 
     processNext();
   }
 
-  function clickBackTwice() {
+  function clickBackOnce() {
     const backBtn = document.querySelector('button[data-testid="app-bar-back"]');
     if (backBtn) {
       backBtn.click();
-      console.log('🔙 First back click');
-      setTimeout(() => {
-        const secondBackBtn = document.querySelector('button[data-testid="app-bar-back"]');
-        if (secondBackBtn) {
-          secondBackBtn.click();
-          console.log('🔙 Second back click — returned to home');
-        } else {
-          console.log('❌ Second back button not found');
-        }
-      }, 1000);
+      console.log('🔙 Back click — returned to home');
     } else {
       console.log('❌ Back button not found');
     }
   }
 
-  setTimeout(goToProfileFromHome, 1000);
+  setTimeout(openHoverCardAndClickVerified, 1000);
 })();
