@@ -1,4 +1,3 @@
-// lists.js
 window.windowsFonts = [
   "Arial", "Arial Black", "Bahnschrift",
     "Calibri", "Cambria", "Cambria Math",
