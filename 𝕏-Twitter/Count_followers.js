@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const targetHandle = '@YanaSn0w1'; // change to the handle you want
+  const targetHandle = 'MusingOnCoffee'; // change to the handle you want
   const scrollOffset = 100;
   const maxChecks   = 2000; // safety cap
   let checkedCount  = 0;
