@@ -2,14 +2,14 @@
   'use strict';
 
   const maxChecks = 100;
-  const maxFollow = 10;
+  const maxFollow = 1;
   const follow = true;
   const scrollOffset = 100;
   const checkDelay = 100;
   const followDelay = 2000;
   const loadMoreDelay = 1000;
   const followArriveDelay = 2000;
-  const timerDuration = 1 * 60; // FB every 1 minute for testing
+  const timerDuration = 3.1 * 60; // 3.1 minute
 
   let checkedCount = 0;
   let followedCountHr = parseInt(localStorage.getItem('followedCountHr')) || 0;
