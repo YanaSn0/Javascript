@@ -9,7 +9,7 @@
   const followDelay = 2000;
   const loadMoreDelay = 1000;
   const followArriveDelay = 2000;
-  const timerDuration = 1 * 60;
+  const timerDuration = 1 * 60; // FB every 1 minute for testing
 
   let checkedCount = 0;
   let followedCountHr = parseInt(localStorage.getItem('followedCountHr')) || 0;
@@ -25,16 +25,21 @@
 
   function checkAndResetCounters() {
     const now = new Date();
-    if (now.getHours() === 4 && now.getMinutes() === 0) {
+    const currentHour = now.getHours();
+    const lastResetHour = parseInt(localStorage.getItem('lastResetHour')) || -1;
+
+    if (now.getMinutes() === 0 && currentHour !== lastResetHour) {
       followedCountHr = 0;
       try {
         localStorage.setItem('followedCountHr', followedCountHr);
-        console.log('Hourly counter reset to 0');
+        localStorage.setItem('lastResetHour', currentHour);
+        console.log('Hourly counter reset to 0 at hour:', currentHour);
       } catch (e) {
-        console.error('Failed to update followedCountHr in localStorage:', e);
+        console.error('Failed to update followedCountHr or lastResetHour in localStorage:', e);
       }
       updateCounterDisplay();
     }
+
     if (now.getHours() === 0 && now.getMinutes() === 0) {
       followedCountDay = 0;
       try {
