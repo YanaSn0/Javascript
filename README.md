@@ -7,4 +7,4 @@
 - Don't use them if you value your account.
 - Paste the script in the console and click run on your following page.
 - Should run with tampermonkey if pasting in console is to much.
-- Alt tab and changing windows wont work unless use VM.
+- Alt tab and changing windows doesn't work unless use VM.
