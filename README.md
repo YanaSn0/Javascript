@@ -1,4 +1,5 @@
 # 𝕏-Twitter Remove non-mutual.
+- Removes all who didn't follow back or unfollowed or got suspended.
 # 𝕏-Twitter Follow_back.
 # How to use.
 - Using these scripts violates the terms of service.
