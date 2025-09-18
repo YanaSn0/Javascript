@@ -18,11 +18,11 @@ function getTweetTypes(htmlElement) {
   if (repost) types.push('repost');
   if (quoteIndicator) types.push('quote');
   if (replyConnector) types.push('comment');
-  if (noReply) types.push('noReply');
+  if (noReply) types.push('blocked');
   if (!isSpace && !isVerified) types.push('unverified');
   if (types.length === 0) types.push('post');
 
-  const order = ['noReply', 'unverified', 'promoted', 'pinned', 'groupPost', 'repost', 'quote', 'comment', 'post'];
+  const order = ['blocked', 'unverified', 'promoted', 'pinned', 'groupPost', 'repost', 'quote', 'comment', 'post'];
   types.sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
   return types;
@@ -39,7 +39,7 @@ function createIndicators(types) {
     unverified: { text: 'Unverified', color: '#FF0000' },
     pinned: { text: 'Pinned', color: '#FFD700' },
     promoted: { text: 'Promoted', color: '#808080' },
-    noReply: { text: 'No Reply', color: '#FF0000' }
+    blocked: { text: 'Blocked', color: '#FF0000' }
   };
 
   // Load global layout preference
