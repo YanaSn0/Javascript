@@ -10,6 +10,8 @@ function getTweetTypes(htmlElement) {
   const isVerified = !!htmlElement.querySelector('[data-testid="icon-verified"]');
   const isSpace = !!htmlElement.querySelector('[data-testid="wrapperView"]');
   const noReply = !!htmlElement.querySelector('[data-testid="reply"][aria-disabled="true"]');
+  const blocked = !!htmlElement.querySelector('button[aria-label="Share post"][aria-disabled="true"]');
+  const limitedReply = Array.from(htmlElement.querySelectorAll('.css-146c3p1')).some(el => el.innerText.includes('can reply'));
 
   let types = [];
   if (promoted) types.push('promoted');
@@ -18,11 +20,13 @@ function getTweetTypes(htmlElement) {
   if (repost) types.push('repost');
   if (quoteIndicator) types.push('quote');
   if (replyConnector) types.push('comment');
-  if (noReply) types.push('blocked');
+  if (noReply) types.push('noReply');
+  if (blocked) types.push('blocked');
+  if (limitedReply) types.push('limited');
   if (!isSpace && !isVerified) types.push('unverified');
   if (types.length === 0) types.push('post');
 
-  const order = ['blocked', 'unverified', 'promoted', 'pinned', 'groupPost', 'repost', 'quote', 'comment', 'post'];
+  const order = ['blocked', 'noReply', 'limited', 'unverified', 'promoted', 'pinned', 'groupPost', 'repost', 'quote', 'comment', 'post'];
   types.sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
   return types;
@@ -39,7 +43,9 @@ function createIndicators(types) {
     unverified: { text: 'Unverified', color: '#FF0000' },
     pinned: { text: 'Pinned', color: '#FFD700' },
     promoted: { text: 'Promoted', color: '#808080' },
-    blocked: { text: 'Blocked', color: '#FF0000' }
+    noReply: { text: 'No Reply', color: '#FF0000' },
+    blocked: { text: 'Blocked', color: '#FF0000' },
+    limited: { text: 'Limited', color: '#FF0000' }
   };
 
   // Load global layout preference
@@ -79,6 +85,15 @@ function createIndicators(types) {
   const typeKey = types.join(',');
   const savedPositions = JSON.parse(localStorage.getItem('indicatorPositions')) || {};
   const defaults = {
+    "blocked,pinned":{"left":-6,"top":38},
+    "blocked,repost":{"left":-8,"top":42},
+    "blocked,unverified,groupPost,repost":{"left":-14,"top":41},
+    "blocked,groupPost,repost":{"left":-10,"top":40},
+    "blocked,repost,quote":{"left":-13,"top":38},
+    "blocked,groupPost,quote":{"left":-8,"top":43},
+    "repost":{"left":-9,"top":42},
+    "post":{"left":-1,"top":46},
+    "quote":{"left":-4,"top":48},
     'unverified,quote': {left: -22, top: 40},
     'groupPost': {left: -4, top: 44},
     'comment': {left: -2, top: 43},
