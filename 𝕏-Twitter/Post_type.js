@@ -1,40 +1,58 @@
-// Namespace wrapper
+// == TweetIndicators (SVG class-based noReply; overwrite 'post' on noReply/limited) ==
 window.TweetIndicators = (() => {
 
-  // --- DETECTORS MAP (mutable) ---
+  // ---- DETECTORS ----
   const detectors = {
     promoted: el => {
       const ctx = el.querySelector('[data-testid="socialContext"]');
-      return ctx && ctx.textContent.toLowerCase().includes('promoted');
+      return !!(ctx && (ctx.textContent || '').toLowerCase().includes('promoted'));
     },
     pinned: el => {
       const ctx = el.querySelector('[data-testid="socialContext"]');
-      return ctx && ctx.textContent.toLowerCase().includes('pinned');
+      return !!(ctx && (ctx.textContent || '').toLowerCase().includes('pinned'));
     },
     groupPost: el =>
       !!el.querySelector('[data-testid="communityPost"], a[href*="/i/communities/"]'),
     repost: el => {
       const ctx = el.querySelector('[data-testid="socialContext"]');
-      return ctx && ctx.textContent.toLowerCase().includes('repost');
+      return !!(ctx && (ctx.textContent || '').toLowerCase().includes('repost'));
     },
     quote: el =>
       !!el.querySelector('[data-testid="tweetQuote"], .css-175oi2r.r-6gpygo.r-jusfrs'),
+
     comment: el => {
-      // Attached replies (connector line)
-      const replyConnector = !!el.querySelector(
+      const replyingText = /\bReplying to\b/i.test(el.innerText || '');
+      const replyingCtx = !!el.querySelector(
+        '[data-testid="replyingToContext"], [data-testid*="replying"]'
+      );
+      const ariaReply = !!el.querySelector('[aria-label*="Replying to"]');
+      const legacyConnector = !!el.querySelector(
         '.r-18kxxzh.r-1wron08.r-onrtq4.r-15zivkp:not(.r-obd0qt)'
       );
-      // Unattached replies ("Replying to …" block)
-      const replyingToBlock = !!el.textContent.includes('Replying to');
-      return replyConnector || replyingToBlock;
+      return replyingText || replyingCtx || ariaReply || legacyConnector;
     },
-    noReply: el => !!el.querySelector('[data-testid="reply"][aria-disabled="true"]'),
+
+    // NoReply: detect disabled reply icon via SVG class
+    noReply: el => {
+      const icon = el.querySelector('button[data-testid="reply"] svg');
+      if (!icon) return false;
+      const cls = icon.getAttribute('class') || '';
+      // Disabled reply icons carry r-12c3ph5 (extra muted style class)
+      return /\br-12c3ph5\b/.test(cls);
+    },
+
+    limited: el => {
+      const texts = [
+        ...el.querySelectorAll('[data-testid="socialContext"], .css-146c3p1')
+      ].map(n => (n.textContent || '').toLowerCase());
+      return texts.some(t =>
+        /\b(only people|followers can reply|verified accounts|mentioned users|accounts .* mentioned can reply)\b/.test(t)
+      );
+    },
+
     blocked: el =>
       !!el.querySelector('button[aria-label="Share post"][aria-disabled="true"]'),
-    limited: el =>
-      Array.from(el.querySelectorAll('.css-146c3p1')).some(n =>
-        n.textContent.includes('can reply')
-      ),
+
     unverified: el =>
       !el.querySelector('[data-testid="icon-verified"]') &&
       !el.querySelector('[data-testid="wrapperView"]')
@@ -49,52 +67,64 @@ window.TweetIndicators = (() => {
   function getTweetTypes(htmlElement) {
     let types = [];
     for (const [type, fn] of Object.entries(detectors)) {
-      if (fn(htmlElement)) types.push(type);
+      try { if (fn(htmlElement)) types.push(type); } catch {}
     }
+
     if (types.length === 0) types.push('post');
+
+    // Overwrite: if noReply or limited, strip out 'post'
+    if (types.includes('noReply') || types.includes('limited')) {
+      types = types.filter(t => t !== 'post');
+    }
+
     types.sort((a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b));
     return types;
   }
 
+  // ---- INDICATOR UI ----
   function createIndicators(types) {
     const indicator = document.createElement('div');
-    const indicators = {
-      repost: { text: 'Repost', color: '#000000' },
-      groupPost: { text: 'Group', color: '#800080' },
-      quote: { text: 'Quote', color: '#0000FF' },
-      comment: { text: 'Reply', color: '#8B4513' },
-      post: { text: 'Post', color: '#00FF00' },
-      unverified: { text: 'Unverified', color: '#FF0000' },
-      pinned: { text: 'Pinned', color: '#FFD700' },
-      promoted: { text: 'Promoted', color: '#808080' },
-      noReply: { text: 'No Reply', color: '#FF0000' },
-      blocked: { text: 'Blocked', color: '#FF0000' },
-      limited: { text: 'Limited', color: '#FF0000' }
+    const palette = {
+      repost:    { text: 'Repost',     color: '#000000' },
+      groupPost: { text: 'Group',      color: '#800080' },
+      quote:     { text: 'Quote',      color: '#0000FF' },
+      comment:   { text: 'Reply',      color: '#8B4513' },
+      post:      { text: 'Post',       color: '#00FF00' },
+      unverified:{ text: 'Unverified', color: '#FF0000' },
+      pinned:    { text: 'Pinned',     color: '#FFD700' },
+      promoted:  { text: 'Promoted',   color: '#808080' },
+      noReply:   { text: 'No Reply',   color: '#FF0000' },
+      blocked:   { text: 'Blocked',    color: '#FF0000' },
+      limited:   { text: 'Limited',    color: '#FF0000' }
     };
 
-    indicator.style.display = 'flex';
-    indicator.style.flexDirection = localStorage.getItem('indicatorLayout') || 'row';
-    indicator.style.flexWrap = 'wrap';
-    indicator.style.alignItems = 'center';
-    indicator.style.position = 'absolute';
-    indicator.style.top = '38px';
-    indicator.style.left = '0px';
-    indicator.style.zIndex = '4000';
-    indicator.style.borderRadius = '3px';
-    indicator.style.gap = '4px';
-    indicator.style.padding = '2px';
-    indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+    Object.assign(indicator.style, {
+      display: 'flex',
+      flexDirection: localStorage.getItem('indicatorLayout') || 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      position: 'absolute',
+      top: '38px',
+      left: '0px',
+      zIndex: '4000',
+      borderRadius: '3px',
+      gap: '4px',
+      padding: '2px',
+      backgroundColor: 'rgba(255, 255, 255, 0.8)'
+    });
 
     types.forEach(type => {
-      const { text, color } = indicators[type] || { text: type, color: '#000' };
+      const { text, color } = palette[type] || { text: type, color: '#000' };
       const span = document.createElement('span');
       span.textContent = text;
-      span.style.fontSize = '12px';
-      span.style.padding = '0px 4px';
-      span.style.color = color;
-      span.style.whiteSpace = 'nowrap';
-      span.style.borderRadius = '2px';
-      span.style.backgroundColor = 'rgba(0,0,0,0.05)';
+      Object.assign(span.style, {
+        fontSize: '12px',
+        padding: '0px 4px',
+        color,
+        whiteSpace: 'nowrap',
+        borderRadius: '2px',
+        backgroundColor: 'rgba(0,0,0,0.05)'
+      });
       indicator.appendChild(span);
     });
 
@@ -108,14 +138,13 @@ window.TweetIndicators = (() => {
     if (existing) existing.remove();
     const avatar = element.querySelector('[data-testid="Tweet-User-Avatar"]');
     if (!avatar) return;
-    avatar.style.position = 'relative';
+    if (getComputedStyle(avatar).position === 'static') avatar.style.position = 'relative';
     avatar.appendChild(createIndicators(types));
   }
 
+  // ---- RUNNERS ----
   function handleTweets() {
-    const articles = document.querySelectorAll(
-      'article[data-testid="tweet"]:not(.indicator-processed)'
-    );
+    const articles = document.querySelectorAll('article[data-testid="tweet"]:not(.indicator-processed)');
     articles.forEach(article => {
       const types = getTweetTypes(article);
       applyIndicator(article, types);
@@ -143,6 +172,7 @@ window.TweetIndicators = (() => {
 
   function updateDetectors(newDefs) {
     Object.assign(detectors, newDefs);
+    rerunIndicators();
   }
 
   function addReloadButton() {
@@ -162,10 +192,9 @@ window.TweetIndicators = (() => {
     document.body.appendChild(btn);
   }
 
-  // Expose public API
   return { init, rerun: rerunIndicators, updateDetectors };
 
-})(); // closes the IIFE
+})();
 
 // Run once
 TweetIndicators.init();
