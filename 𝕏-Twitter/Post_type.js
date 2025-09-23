@@ -1,216 +1,171 @@
-function getTweetTypes(htmlElement) {
-  const socialContext = htmlElement.querySelector('[data-testid="socialContext"]');
-  const text = socialContext ? socialContext.innerText.toLowerCase() : '';
-  const repost = text.includes('repost');
-  const pinned = text.includes('pinned');
-  const promoted = text.includes('promoted');
-  const replyConnector = !!htmlElement.querySelector('.r-18kxxzh.r-1wron08.r-onrtq4.r-15zivkp:not(.r-obd0qt)');
-  const quoteIndicator = !!htmlElement.querySelector('[data-testid="tweetQuote"], .css-175oi2r.r-6gpygo.r-jusfrs');
-  const communityIndicator = !!htmlElement.querySelector('[data-testid="communityPost"], a[href*="/i/communities/"]');
-  const isVerified = !!htmlElement.querySelector('[data-testid="icon-verified"]');
-  const isSpace = !!htmlElement.querySelector('[data-testid="wrapperView"]');
-  const noReply = !!htmlElement.querySelector('[data-testid="reply"][aria-disabled="true"]');
-  const blocked = !!htmlElement.querySelector('button[aria-label="Share post"][aria-disabled="true"]');
-  const limitedReply = Array.from(htmlElement.querySelectorAll('.css-146c3p1')).some(el => el.innerText.includes('can reply'));
+// Namespace wrapper
+window.TweetIndicators = (() => {
 
-  let types = [];
-  if (promoted) types.push('promoted');
-  if (pinned) types.push('pinned');
-  if (communityIndicator) types.push('groupPost');
-  if (repost) types.push('repost');
-  if (quoteIndicator) types.push('quote');
-  if (replyConnector) types.push('comment');
-  if (noReply) types.push('noReply');
-  if (blocked) types.push('blocked');
-  if (limitedReply) types.push('limited');
-  if (!isSpace && !isVerified) types.push('unverified');
-  if (types.length === 0) types.push('post');
-
-  const order = ['blocked', 'noReply', 'limited', 'unverified', 'promoted', 'pinned', 'groupPost', 'repost', 'quote', 'comment', 'post'];
-  types.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-
-  return types;
-}
-
-function createIndicators(types) {
-  const indicator = document.createElement('div');
-  const indicators = {
-    repost: { text: 'Repost', color: '#000000' },
-    groupPost: { text: 'Group', color: '#800080' },
-    quote: { text: 'Quote', color: '#0000FF' },
-    comment: { text: 'Reply', color: '#8B4513' },
-    post: { text: 'Post', color: '#00FF00' },
-    unverified: { text: 'Unverified', color: '#FF0000' },
-    pinned: { text: 'Pinned', color: '#FFD700' },
-    promoted: { text: 'Promoted', color: '#808080' },
-    noReply: { text: 'No Reply', color: '#FF0000' },
-    blocked: { text: 'Blocked', color: '#FF0000' },
-    limited: { text: 'Limited', color: '#FF0000' }
+  // --- DETECTORS MAP (mutable) ---
+  const detectors = {
+    promoted: el => {
+      const ctx = el.querySelector('[data-testid="socialContext"]');
+      return ctx && ctx.textContent.toLowerCase().includes('promoted');
+    },
+    pinned: el => {
+      const ctx = el.querySelector('[data-testid="socialContext"]');
+      return ctx && ctx.textContent.toLowerCase().includes('pinned');
+    },
+    groupPost: el =>
+      !!el.querySelector('[data-testid="communityPost"], a[href*="/i/communities/"]'),
+    repost: el => {
+      const ctx = el.querySelector('[data-testid="socialContext"]');
+      return ctx && ctx.textContent.toLowerCase().includes('repost');
+    },
+    quote: el =>
+      !!el.querySelector('[data-testid="tweetQuote"], .css-175oi2r.r-6gpygo.r-jusfrs'),
+    comment: el => {
+      // Attached replies (connector line)
+      const replyConnector = !!el.querySelector(
+        '.r-18kxxzh.r-1wron08.r-onrtq4.r-15zivkp:not(.r-obd0qt)'
+      );
+      // Unattached replies ("Replying to …" block)
+      const replyingToBlock = !!el.textContent.includes('Replying to');
+      return replyConnector || replyingToBlock;
+    },
+    noReply: el => !!el.querySelector('[data-testid="reply"][aria-disabled="true"]'),
+    blocked: el =>
+      !!el.querySelector('button[aria-label="Share post"][aria-disabled="true"]'),
+    limited: el =>
+      Array.from(el.querySelectorAll('.css-146c3p1')).some(n =>
+        n.textContent.includes('can reply')
+      ),
+    unverified: el =>
+      !el.querySelector('[data-testid="icon-verified"]') &&
+      !el.querySelector('[data-testid="wrapperView"]')
   };
 
-  // Load global layout preference
-  const layout = localStorage.getItem('indicatorLayout') || 'row';
+  const typeOrder = [
+    'blocked','noReply','limited','unverified',
+    'promoted','pinned','groupPost','repost',
+    'quote','comment','post'
+  ];
 
-  indicator.style.display = 'flex';
-  indicator.style.flexDirection = layout;
-  indicator.style.flexWrap = 'wrap';
-  indicator.style.alignItems = 'center';
-  indicator.style.position = 'absolute';
-  indicator.style.top = '38px';
-  indicator.style.left = '0px';
-  indicator.style.zIndex = '4000';
-  indicator.style.borderRadius = '3px';
-  indicator.style.gap = '4px';
-  indicator.style.padding = '2px';
-  indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-  indicator.style.cursor = 'move';
-
-  types.forEach(type => {
-    const { text, color } = indicators[type] || { text: type, color: '#000' };
-    const textSpan = document.createElement('span');
-    textSpan.textContent = text;
-    textSpan.style.fontSize = '12px';
-    textSpan.style.padding = '0px 4px';
-    textSpan.style.color = color;
-    textSpan.style.whiteSpace = 'nowrap';
-    textSpan.style.borderRadius = '2px';
-    textSpan.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
-    indicator.appendChild(textSpan);
-  });
-
-  indicator.classList.add('custom-indicator');
-  indicator.setAttribute('aria-label', types.join(' '));
-
-  // Load saved position per type combination
-  const typeKey = types.join(',');
-  const savedPositions = JSON.parse(localStorage.getItem('indicatorPositions')) || {};
-  const defaults = {
-    "blocked,pinned":{"left":-6,"top":38},
-    "blocked,repost":{"left":-8,"top":42},
-    "blocked,unverified,groupPost,repost":{"left":-14,"top":41},
-    "blocked,groupPost,repost":{"left":-10,"top":40},
-    "blocked,repost,quote":{"left":-13,"top":38},
-    "blocked,groupPost,quote":{"left":-8,"top":43},
-    "repost":{"left":-9,"top":42},
-    "post":{"left":-1,"top":46},
-    "quote":{"left":-4,"top":48},
-    'unverified,quote': {left: -22, top: 40},
-    'groupPost': {left: -4, top: 44},
-    'comment': {left: -2, top: 43},
-    'post': {left: 1, top: 43},
-    'quote': {left: -4, top: 42},
-    'unverified': {left: -19, top: 40},
-    'unverified,comment': {left: -19, top: 42},
-    'unverified,groupPost': {left: -19, top: 38},
-    'unverified,repost': {left: -19, top: 42}
-  };
-  const position = savedPositions[typeKey] || defaults[typeKey] || { left: 0, top: 38 };
-  indicator.style.left = `${position.left}px`;
-  indicator.style.top = `${position.top}px`;
-
-  // Make draggable
-  let isDragging = false;
-  let startX, startY, initialLeft, initialTop;
-
-  indicator.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    initialLeft = parseInt(indicator.style.left, 10);
-    initialTop = parseInt(indicator.style.top, 10);
-    document.body.style.userSelect = 'none';
-  });
-
-  const onMouseMove = (e) => {
-    if (isDragging) {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      indicator.style.left = `${initialLeft + dx}px`;
-      indicator.style.top = `${initialTop + dy}px`;
+  function getTweetTypes(htmlElement) {
+    let types = [];
+    for (const [type, fn] of Object.entries(detectors)) {
+      if (fn(htmlElement)) types.push(type);
     }
-  };
+    if (types.length === 0) types.push('post');
+    types.sort((a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b));
+    return types;
+  }
 
-  const onMouseUp = (e) => {
-    if (isDragging) {
-      isDragging = false;
-      document.body.style.userSelect = '';
-      e.preventDefault();
-      e.stopPropagation();
-      // Save position per type
-      const newPosition = {
-        left: parseInt(indicator.style.left, 10),
-        top: parseInt(indicator.style.top, 10)
-      };
-      const positions = JSON.parse(localStorage.getItem('indicatorPositions')) || {};
-      positions[typeKey] = newPosition;
-      localStorage.setItem('indicatorPositions', JSON.stringify(positions));
-    }
-  };
+  function createIndicators(types) {
+    const indicator = document.createElement('div');
+    const indicators = {
+      repost: { text: 'Repost', color: '#000000' },
+      groupPost: { text: 'Group', color: '#800080' },
+      quote: { text: 'Quote', color: '#0000FF' },
+      comment: { text: 'Reply', color: '#8B4513' },
+      post: { text: 'Post', color: '#00FF00' },
+      unverified: { text: 'Unverified', color: '#FF0000' },
+      pinned: { text: 'Pinned', color: '#FFD700' },
+      promoted: { text: 'Promoted', color: '#808080' },
+      noReply: { text: 'No Reply', color: '#FF0000' },
+      blocked: { text: 'Blocked', color: '#FF0000' },
+      limited: { text: 'Limited', color: '#FF0000' }
+    };
 
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mouseup', onMouseUp);
+    indicator.style.display = 'flex';
+    indicator.style.flexDirection = localStorage.getItem('indicatorLayout') || 'row';
+    indicator.style.flexWrap = 'wrap';
+    indicator.style.alignItems = 'center';
+    indicator.style.position = 'absolute';
+    indicator.style.top = '38px';
+    indicator.style.left = '0px';
+    indicator.style.zIndex = '4000';
+    indicator.style.borderRadius = '3px';
+    indicator.style.gap = '4px';
+    indicator.style.padding = '2px';
+    indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
 
-  // Prevent click on indicator from propagating
-  indicator.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
+    types.forEach(type => {
+      const { text, color } = indicators[type] || { text: type, color: '#000' };
+      const span = document.createElement('span');
+      span.textContent = text;
+      span.style.fontSize = '12px';
+      span.style.padding = '0px 4px';
+      span.style.color = color;
+      span.style.whiteSpace = 'nowrap';
+      span.style.borderRadius = '2px';
+      span.style.backgroundColor = 'rgba(0,0,0,0.05)';
+      indicator.appendChild(span);
+    });
 
-  // Double-click to toggle layout
-  indicator.addEventListener('dblclick', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const currentLayout = localStorage.getItem('indicatorLayout') || 'row';
-    const newLayout = currentLayout === 'row' ? 'column' : 'row';
-    localStorage.setItem('indicatorLayout', newLayout);
-    // To apply immediately, would need to re-render all, but since page reload or scroll will apply, or alert to refresh
-    alert('Layout changed to ' + newLayout + '. Refresh or scroll to apply to all.');
-  });
+    indicator.classList.add('custom-indicator');
+    indicator.setAttribute('aria-label', types.join(' '));
+    return indicator;
+  }
 
-  return indicator;
-}
+  function applyIndicator(element, types) {
+    const existing = element.querySelector('.custom-indicator');
+    if (existing) existing.remove();
+    const avatar = element.querySelector('[data-testid="Tweet-User-Avatar"]');
+    if (!avatar) return;
+    avatar.style.position = 'relative';
+    avatar.appendChild(createIndicators(types));
+  }
 
-function applyIndicator(element, types) {
-  const existingIndicator = element.querySelector('.custom-indicator');
-  if (existingIndicator) existingIndicator.remove();
+  function handleTweets() {
+    const articles = document.querySelectorAll(
+      'article[data-testid="tweet"]:not(.indicator-processed)'
+    );
+    articles.forEach(article => {
+      const types = getTweetTypes(article);
+      applyIndicator(article, types);
+      article.classList.add('indicator-processed');
+    });
+  }
 
-  const avatarContainer = element.querySelector('[data-testid="Tweet-User-Avatar"]');
-  if (!avatarContainer) return;
-  avatarContainer.style.position = 'relative';
+  function observeTweets() {
+    const observer = new MutationObserver(() => handleTweets());
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 
-  avatarContainer.appendChild(createIndicators(types));
-}
-
-function handleTweets() {
-  const articles = document.querySelectorAll('article[data-testid="tweet"]:not(.indicator-processed)');
-  if (articles.length < 3) return;
-
-  articles.forEach(article => {
-    const types = getTweetTypes(article);
-    applyIndicator(article, types);
-    article.classList.add('indicator-processed');
-  });
-}
-
-function debounce(func, wait) {
-  let timeout;
-  return function (...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
-}
-
-function setupScrollListener() {
-  window.addEventListener('scroll', debounce(() => {
+  function init() {
     handleTweets();
-  }, 300));
-}
+    observeTweets();
+    addReloadButton();
+  }
 
-function init() {
-  handleTweets();
-  setupScrollListener();
-}
+  function rerunIndicators() {
+    document.querySelectorAll('article[data-testid="tweet"].indicator-processed')
+      .forEach(el => el.classList.remove('indicator-processed'));
+    document.querySelectorAll('.custom-indicator').forEach(el => el.remove());
+    handleTweets();
+  }
 
-init();
+  function updateDetectors(newDefs) {
+    Object.assign(detectors, newDefs);
+  }
+
+  function addReloadButton() {
+    if (document.getElementById('indicator-reload-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'indicator-reload-btn';
+    btn.textContent = '↻ Reload Indicators';
+    Object.assign(btn.style, {
+      position: 'fixed', bottom: '10px', right: '10px',
+      zIndex: 99999, padding: '6px 10px', fontSize: '12px',
+      background: '#222', color: '#fff', border: '1px solid #555',
+      borderRadius: '4px', cursor: 'pointer', opacity: '0.7'
+    });
+    btn.onmouseenter = () => btn.style.opacity = '1';
+    btn.onmouseleave = () => btn.style.opacity = '0.7';
+    btn.onclick = () => rerunIndicators();
+    document.body.appendChild(btn);
+  }
+
+  // Expose public API
+  return { init, rerun: rerunIndicators, updateDetectors };
+
+})(); // closes the IIFE
+
+// Run once
+TweetIndicators.init();
