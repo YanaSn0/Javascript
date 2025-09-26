@@ -5,7 +5,7 @@ let emptyScrolls = 0; // 🧠 Track how many times we scroll without finding tar
 const maxEmptyScrolls = 3;
 
 function randomDelay() {
-  return Math.floor(1000 + Math.random() * 1000);
+  return Math.floor(500 + Math.random() * 500);
 }
 
 function scrollFollowersContainer() {
