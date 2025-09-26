@@ -1,278 +1,149 @@
-function unfollowAllSmart() {
-  const whitelist = ['yourbestie', 'yanaheat', 'yanasn0w1'];
-  let unfollowedCount = 0;
-  let scrollAttempts = 0;
-  let isRunning = false; // Start paused
-  let isPaused = false; // Track pause state
-  let timeoutId = null; // Track timeout
-  const maxScrollAttempts = 10;
-  const maxUnfollows = 300;
-  let mRetry = 0; // Pause after one failure
-  let dPause = 10; // Default 10 Seconds
-  let dPauseUnit = 'Seconds'; // Default unit
-  let lastDPauseValue = 10; // For unit switching
-  let lastFailedUsername = null; // For retry
-  let lastFailedButton = null; // For retry
+(async () => {
+  // -----------------------------
+  // Config
+  // -----------------------------
+  const followers = false;   // unfollow people who follow you
+  const following = true;    // unfollow people you follow
 
-  // Create UI
-  const ui = document.createElement('div');
-  ui.style.position = 'fixed';
-  ui.style.top = '10px';
-  ui.style.right = '10px';
-  ui.style.zIndex = '1000';
-  ui.style.background = '#fff';
-  ui.style.padding = '8px'; // Minimal padding
-  ui.style.border = '1px solid #ccc';
-  ui.style.borderRadius = '5px';
-  ui.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-  ui.style.textAlign = 'center'; // Center all rows
-  ui.innerHTML = `
-    <div style="margin-bottom: 5px;">
-      <button id="startBtn" style="margin-right: 5px; width: 60px;">Start</button>
-      <button id="stopBtn" style="width: 60px;">Stop</button>
-    </div>
-    <div style="margin-bottom: 5px;"><span id="statusText">Paused</span></div>
-    <div style="margin-bottom: 5px;">Unfollowed: <span id="unfollowCount">0</span></div>
-    <div style="margin-bottom: 5px;">
-      <span style="margin-right: 3px;">Retry</span>
-      <input id="mRetry" type="number" min="0" max="20" value="0" style="width: 45px; text-align: center; margin: 0 2px;">
-    </div>
-    <div>
-      <span id="dPauseUnit" style="margin-right: 3px;">Seconds</span>
-      <input id="dPause" type="number" min="5" max="59" value="10" step="1" style="width: 45px; text-align: center; margin: 0 2px;">
-    </div>
-  `;
-  document.body.appendChild(ui);
+  const WAIT_BEFORE_CLICK_FOLLOWING_MS = 2500;
+  const limitU = 200;        // unfollow cap
+  let countU = 0;            // unfollow counter
+  const minU = 500;          // min delay (ms)
+  const maxU = 1000;         // max delay (ms)
 
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const statusText = document.getElementById('statusText');
-  const countSpan = document.getElementById('unfollowCount');
-  const mRetryInput = document.getElementById('mRetry');
-  const dPauseInput = document.getElementById('dPause');
-  const dPauseUnitSpan = document.getElementById('dPauseUnit');
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function randomDelay() {
+    const ms = Math.floor(Math.random() * (maxU - minU + 1)) + minU;
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
-  // Update mRetry
-  mRetryInput.addEventListener('input', () => {
-    const value = parseInt(mRetryInput.value);
-    if (value >= 0 && value <= 20) mRetry = value;
-    else mRetryInput.value = mRetry;
-  });
+  // -----------------------------
+  // Navigation
+  // -----------------------------
+  async function goToProfile() {
+    const profileLink = [...document.querySelectorAll('a[role="link"]')]
+      .find(a => a.querySelector('svg[aria-label="Profile"]'));
+    if (profileLink) {
+      profileLink.click();
+      console.log('[Threads] Clicked profile');
+      await sleep(2000);
+    }
+  }
 
-  // Update dPause and unit
-  dPauseInput.addEventListener('input', () => {
-    let value = parseInt(dPauseInput.value) || 0;
-    let newUnit = dPauseUnit;
-
-    const isIncrement = value > lastDPauseValue;
-    const isDecrement = value < lastDPauseValue;
-
-    if (dPauseUnit === 'Seconds') {
-      if (value < 5) {
-        value = 5;
-        dPauseInput.value = value;
-      } else if (isIncrement && value >= 59) {
-        newUnit = 'Minutes';
-        value = 1;
-        dPauseInput.min = 1;
-        dPauseInput.max = 59;
-        dPauseUnitSpan.textContent = 'Minutes';
-      }
-    } else if (dPauseUnit === 'Minutes') {
-      if (isIncrement && value >= 59) {
-        newUnit = 'Hours';
-        value = 1;
-        dPauseInput.min = 1;
-        dPauseInput.max = 24;
-        dPauseUnitSpan.textContent = 'Hours';
-      } else if (isDecrement && value <= 1) {
-        newUnit = 'Seconds';
-        value = 59;
-        dPauseInput.min = 5;
-        dPauseInput.max = 59;
-        dPauseUnitSpan.textContent = 'Seconds';
-      }
-    } else if (dPauseUnit === 'Hours') {
-      if (value > 24) {
-        value = 24;
-        dPauseInput.value = value;
-      } else if (isDecrement && value <= 1) {
-        newUnit = 'Minutes';
-        value = 59;
-        dPauseInput.min = 1;
-        dPauseInput.max = 59;
-        dPauseUnitSpan.textContent = 'Minutes';
-      }
+  async function openList() {
+    const counts = [...document.querySelectorAll('a, div[role="button"], span')]
+      .filter(el => /followers/i.test(el.textContent) || /following/i.test(el.textContent));
+    if (counts.length) {
+      counts[0].click();
+      console.log('[Threads] Opened followers/following modal');
+      await sleep(1500);
     }
 
-    dPause = value;
-    dPauseUnit = newUnit;
-    dPauseInput.value = value;
-    lastDPauseValue = value;
-  });
-
-  // Start button
-  startBtn.addEventListener('click', () => {
-    if (!isRunning && !isPaused) {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = null;
-      isRunning = true;
-      isPaused = false;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      statusText.textContent = 'Running';
-      console.log(`Starting unfollow script for Threads at ${new Date().toLocaleString()}`);
-      clickNext();
-    }
-  });
-
-  // Stop button
-  stopBtn.addEventListener('click', () => {
-    if (isRunning || isPaused) {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = null;
-      isRunning = false;
-      isPaused = false;
-      startBtn.disabled = false;
-      stopBtn.disabled = false;
-      statusText.textContent = 'Stopped';
-      if (lastFailedUsername) {
-        console.log(`Pause canceled for ${lastFailedUsername}`);
+    if (following && !followers) {
+      await sleep(WAIT_BEFORE_CLICK_FOLLOWING_MS);
+      let tab =
+        document.querySelector('div[aria-label="Following"][role="button"]') ||
+        [...document.querySelectorAll('[role="tab"]')]
+          .find(el => (el.textContent || '').trim().toLowerCase() === 'following') ||
+        [...document.querySelectorAll('div[role="button"], button, span')]
+          .find(el => (el.textContent || '').trim() === 'Following');
+      if (tab) {
+        tab.click();
+        console.log('[Threads] Switched to Following tab');
+        await sleep(2000);
       }
-      console.log('Script stopped by user');
-      lastFailedUsername = null;
-      lastFailedButton = null;
     }
-  });
+  }
 
-  function getFollowButtons() {
-    return Array.from(document.querySelectorAll('div[role="button"].x1i10hfl'))
-      .filter(btn => btn.textContent.trim() === 'Following' && btn.querySelector('div.xlyipyv'))
-      .map(btn => {
-        const parent = btn.closest('div.x78zum5.x1q0g3np');
-        const username = parent?.querySelector('a[href^="/@"] span.x1lliihq')?.textContent?.trim().toLowerCase()?.replace('@', '') || `unknown_${unfollowedCount}_${Date.now()}`;
-        if (username.startsWith('unknown_')) {
-          console.log(`Debug: No username found. Parent HTML: ${parent?.outerHTML.slice(0, 200) || 'none'}...`);
+  // -----------------------------
+  // Helper: wait for confirm
+  // -----------------------------
+  async function waitForUnfollowConfirm(timeout = 2000) {
+    return new Promise(resolve => {
+      const observer = new MutationObserver(() => {
+        const confirm = [...document.querySelectorAll('button, div[role="button"]')]
+          .find(el => el.offsetParent !== null && el.textContent.trim() === 'Unfollow');
+        if (confirm) {
+          observer.disconnect();
+          resolve(confirm);
         }
-        return { button: btn, username };
-      })
-      .filter(item => !whitelist.includes(item.username));
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => { observer.disconnect(); resolve(null); }, timeout);
+    });
   }
 
-  function scrollToBottom() {
-    const currentHeight = document.body.scrollHeight;
-    window.scrollTo({ top: currentHeight, behavior: 'smooth' });
-    console.log(`Scrolling to height: ${currentHeight}`);
-  }
-
-  function clickNext() {
-    if (!isRunning || isPaused) return;
-
-    if (unfollowedCount >= maxUnfollows) {
-      console.log(`Stopped: Reached daily unfollow limit of ${maxUnfollows}.`);
-      isRunning = false;
-      isPaused = false;
-      startBtn.disabled = false;
-      stopBtn.disabled = false;
-      statusText.textContent = 'Stopped';
-      return;
+  // -----------------------------
+  // Exit helpers
+  // -----------------------------
+  async function exitToHome() {
+    // click outside modal
+    document.body.click();
+    await sleep(1000);
+    // click home link
+    const homeLink = document.querySelector('a[href="/"][role="link"]');
+    if (homeLink) {
+      homeLink.click();
+      console.log('[Threads] Returned home');
     }
+  }
 
-    let btn, username;
-    if (lastFailedUsername && lastFailedButton && lastFailedButton.isConnected && lastFailedButton.textContent.trim() === 'Following' && lastFailedButton.querySelector('div.xlyipyv')) {
-      btn = lastFailedButton;
-      username = lastFailedUsername;
-      console.log(`Retrying "Following" button for ${username}`);
-    } else {
-      const followButtons = getFollowButtons();
-      if (followButtons.length === 0) {
-        if (scrollAttempts >= maxScrollAttempts) {
-          console.log(`Finished unfollowing ${unfollowedCount} accounts.`);
-          isRunning = false;
-          isPaused = false;
-          startBtn.disabled = false;
-          stopBtn.disabled = false;
-          statusText.textContent = 'Finished';
-          return;
+  // -----------------------------
+  // Unfollow loop
+  // -----------------------------
+  async function unfollowLoop() {
+    let retries = 0;
+
+    while (countU < limitU) {
+      const btn = [...document.querySelectorAll('button, div[role="button"]')]
+        .find(b => b.offsetParent !== null && b.textContent.trim() === 'Following');
+
+      if (!btn) {
+        retries++;
+        if (retries >= 3) {
+          console.log('[Threads] No more buttons after 3 retries, exiting…');
+          await exitToHome();
+          break;
         }
-        scrollToBottom();
-        scrollAttempts++;
-        console.log(`Scrolling (Attempt ${scrollAttempts}/${maxScrollAttempts})`);
-        timeoutId = setTimeout(clickNext, 2000);
-        return;
+        window.scrollBy(0, 800);
+        await sleep(1500);
+        continue;
       }
-      scrollAttempts = 0;
-      ({ button: btn, username } = followButtons[0]);
-      lastFailedUsername = null;
-      lastFailedButton = null;
-    }
 
-    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    console.log(`Clicking "Following" button for ${username}`);
-    btn.click();
+      retries = 0;
+      btn.scrollIntoView({behavior:'smooth', block:'center'});
+      btn.click();
 
-    timeoutId = setTimeout(() => {
-      if (!isRunning || isPaused) return;
+      const confirm = await waitForUnfollowConfirm();
+      if (confirm) {
+        confirm.click();
+        await sleep(500);
 
-      const unfollowBtn = Array.from(document.querySelectorAll('div[role="button"].x1i10hfl'))
-        .find(el => el.textContent.trim() === 'Unfollow' && el.querySelector('span.x1lliihq'));
-
-      if (unfollowBtn) {
-        unfollowBtn.click();
-        timeoutId = setTimeout(() => {
-          if (!isRunning || isPaused) return;
-
-          const buttonText = btn.textContent.trim();
-          console.log(`Button state for ${username}: "${buttonText}"`);
-          if (buttonText !== 'Following') {
-            unfollowedCount++;
-            lastFailedUsername = null;
-            lastFailedButton = null;
-            console.log(`Unfollowed #${unfollowedCount} (${username})`);
-            countSpan.textContent = unfollowedCount;
-            clickNext();
-          } else {
-            console.warn(`Unfollow failed for ${username} (button still says "Following")`);
-            handleFailure(btn, username);
-          }
-        }, 500);
-      } else {
-        console.warn(`Unfollow button not found for ${username}`);
-        handleFailure(btn, username);
-      }
-    }, 2000);
-  }
-
-  function handleFailure(btn, username) {
-    lastFailedUsername = username;
-    lastFailedButton = btn;
-    if (mRetry === 0) {
-      const pauseSeconds = dPauseUnit === 'Seconds' ? dPause : dPauseUnit === 'Minutes' ? dPause * 60 : dPause * 3600;
-      console.log(`Pausing for ${dPause} ${dPauseUnit} due to unfollow failure for ${username}`);
-      isRunning = false;
-      isPaused = true;
-      startBtn.disabled = false;
-      stopBtn.disabled = false;
-      statusText.textContent = `Paused ${dPause} ${dPauseUnit}`;
-      timeoutId = setTimeout(() => {
-        if (!isPaused) {
-          console.log(`Pause canceled for ${username}`);
-          return;
+        // Check if it bounced back to "Following" (rate limit)
+        if (btn.textContent.trim() === 'Following') {
+          console.warn('[Threads] Rate limit detected, exiting to home…');
+          await exitToHome();
+          break;
         }
-        console.log(`Resuming after ${dPause} ${dPauseUnit} for ${username}`);
-        isRunning = true;
-        isPaused = false;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        statusText.textContent = 'Running';
-        clickNext();
-      }, pauseSeconds * 1000);
-    } else {
-      clickNext();
+
+        countU++;
+        console.log(`[Threads] Unfollowed #${countU}`);
+      }
+
+      await randomDelay();
+    }
+
+    if (countU >= limitU) {
+      console.log('[Threads] Done, limit reached.');
+      await exitToHome();
     }
   }
 
-  console.log(`Script loaded in paused state. Click "Start" to begin.`);
-}
-
-unfollowAllSmart();
+  // -----------------------------
+  // Run sequence
+  // -----------------------------
+  await sleep(2000);
+  await goToProfile();
+  await openList();
+  await unfollowLoop();
+})();
