@@ -17,5 +17,5 @@ pip install pillow
 pip install fastapi[all]
 
 # Run your server globally
-cd "$HOME\OneDrive\Scripts\img_test"
+cd $HOME
 uvicorn class:app --reload --port 8000
