@@ -1,21 +1,17 @@
-# Step 1: Create and activate virtual environment
-python -m venv venv
-.\venv\Scripts\activate
-
-# Step 2: Upgrade pip
+# Upgrade pip globally
 python -m pip install --upgrade pip
 
-# Step 3: Install FastAPI and Uvicorn
+# Install FastAPI + Uvicorn
 pip install fastapi uvicorn
 
-# Step 4: Install Hugging Face Transformers and PyTorch
+# Install Hugging Face Transformers + PyTorch
 pip install transformers torch
 
-# Step 5: Install Pillow (required for CLIP image processing)
+# Install Pillow (image processing)
 pip install pillow
 
-# Step 6: Optional — CORS support for browser extension
+# Optional: CORS support
 pip install fastapi[all]
 
-# Step 7: Launch your FastAPI server
+# Run your server globally
 uvicorn class:app --reload --port 8000
