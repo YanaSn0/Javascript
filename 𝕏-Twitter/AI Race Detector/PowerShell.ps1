@@ -1,6 +1,9 @@
 # Upgrade pip globally
 python -m pip install --upgrade pip
 
+# The cleanest fix is to give it the compatibility shim
+pip install tf-keras
+
 # Install FastAPI + Uvicorn
 pip install fastapi uvicorn
 
@@ -14,4 +17,5 @@ pip install pillow
 pip install fastapi[all]
 
 # Run your server globally
+cd "$HOME\OneDrive\Scripts\img_test"
 uvicorn class:app --reload --port 8000
