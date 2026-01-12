@@ -6,8 +6,6 @@
         paused: true,
         pLimit: 2,  // Profile limit
         pCount: 0,  // Current profile follows
-        fLimit: 500, // Daily follow limit
-        fToday: 0,   // Daily follows
         hLimit: 50,  // Hourly follow limit
         hCount: 0,   // Hourly follows
         followDelay: 1000, // Reduced delay between follow actions
@@ -97,13 +95,6 @@
             const pdt = new Date(now).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
             const pdtDate = new Date(pdt);
 
-            if (config.dStart && pdtDate.getHours() >= 17 && now - config.dStart >= 24 * 3600000) {
-                config.fToday = 0;
-                config.dStart = getDayStart();
-                log('Daily follow count reset');
-                save();
-            }
-
             if (config.hStart && now - config.hStart >= 3600000) {
                 config.hCount = 0;
                 config.hStart = getHourStart();
@@ -132,14 +123,12 @@
                 config.paused = config.paused !== undefined ? config.paused : true;
                 config.pLimit = Math.max(1, Math.min(20, config.pLimit || 2));
                 config.pCount = config.pCount || 0;
-                config.fLimit = Math.max(100, Math.min(1000, config.fLimit || 500));
-                config.fToday = config.fToday || 0;
                 config.hLimit = Math.max(10, Math.min(100, config.hLimit || 50));
                 config.hCount = config.hCount || 0;
                 config.followDelay = config.followDelay || 1000;
                 config.dStart = config.dStart || getDayStart();
                 config.hStart = config.hStart || getHourStart();
-                config.followProfileOwner = config.followProfileOwner !== undefined ? config.followProfileOwner : true;
+                config.followProfileOwner = config.followProfileOwner !== undefined ? config.followProfileOwner : false;
             }
         } catch (e) {
             log(`Error loading config: ${e.message}`);
@@ -196,6 +185,9 @@
                 save();
                 updateUI();
                 if (!config.paused && !busy) {
+                    if (window.location.pathname !== '/home') {
+                        await goToHomePage();
+                    }
                     tweetIndex = 0;
                     scrollAttempts = 0;
                     lastHandle = null;
@@ -234,7 +226,65 @@
         }
     };
 
+    async function checkRateLimit() {
+        try {
+            await delay(1000); // Wait for potential toast to appear
+            const toast = document.querySelector('[data-testid="toast"]');
+            if (toast) {
+                const text = toast.textContent.toLowerCase();
+                if (text.includes('rate limited')) {
+                    log('Rate limit detected, pausing for 1 hour');
+                    config.paused = true;
+                    save();
+                    updateUI();
+                    setTimeout(() => {
+                        config.paused = false;
+                        save();
+                        updateUI();
+                        log('Resuming after rate limit pause');
+                        if (!busy) scanFollow();
+                    }, 60 * 60 * 1000);
+                    return true;
+                } else if (text.includes('unable to follow')) {
+                    log('Daily follow limit detected, pausing for 1 hour');
+                    config.paused = true;
+                    save();
+                    updateUI();
+                    setTimeout(() => {
+                        config.paused = false;
+                        save();
+                        updateUI();
+                        log('Resuming after daily limit pause');
+                        if (!busy) scanFollow();
+                    }, 60 * 60 * 1000);
+                    return true;
+                }
+            }
+            return false;
+        } catch (e) {
+            log(`Error checking rate limit: ${e.message}`);
+            return false;
+        }
+    }
+
     // Navigation and follow functions
+    async function goToHomePage() {
+        try {
+            const homeLink = document.querySelector('a[href="/home"]');
+            if (homeLink) {
+                homeLink.click();
+                await delay(2000); // Wait for page to load
+                log('Navigated to home page');
+                return true;
+            }
+            log('Home link not found');
+            return false;
+        } catch (e) {
+            log(`Error navigating to home page: ${e.message}`);
+            return false;
+        }
+    }
+
     async function goToProf(art) {
         try {
             const link = art.querySelector('div[data-testid="User-Name"] a[href*="/"]');
@@ -254,15 +304,17 @@
                     const followBtn = document.querySelector('div[data-testid="placementTracking"] button[data-testid*="-follow"]');
                     if (followBtn) {
                         followBtn.click();
+                        await delay(config.followDelay);
+                        if (await checkRateLimit()) {
+                            return false;
+                        }
                         config.pCount++;
-                        config.fToday++;
                         config.hCount++;
                         if (!config.dStart) config.dStart = getDayStart();
                         if (!config.hStart) config.hStart = getHourStart();
                         save();
                         updateUI();
-                        log(`Followed profile owner @${profile} (Profile: ${config.pCount}/${config.pLimit}, Hour: ${config.hCount}/${config.hLimit}, Day: ${config.fToday}/${config.fLimit})`);
-                        await delay(config.followDelay);
+                        log(`Followed profile owner @${profile} (Profile: ${config.pCount}/${config.pLimit}, Hour: ${config.hCount}/${config.hLimit})`);
                     } else {
                         log(`Already following profile owner @${profile} or no follow button`);
                     }
@@ -355,17 +407,25 @@
 
     async function followUser(cell) {
         try {
+            const protectedIcon = cell.querySelector('svg[aria-label="Protected account"]');
+            if (protectedIcon) {
+                log('Skipping protected account');
+                return false;
+            }
             const followBtn = cell.querySelector('button[data-testid*="-follow"]');
             if (followBtn) {
                 followBtn.click();
+                await delay(config.followDelay);
+                if (await checkRateLimit()) {
+                    return false;
+                }
                 config.pCount++;
-                config.fToday++;
                 config.hCount++;
                 if (!config.dStart) config.dStart = getDayStart();
                 if (!config.hStart) config.hStart = getHourStart();
                 save();
                 updateUI();
-                log(`Followed user (Profile: ${config.pCount}/${config.pLimit}, Hour: ${config.hCount}/${config.hLimit}, Day: ${config.fToday}/${config.fLimit})`);
+                log(`Followed user (Profile: ${config.pCount}/${config.pLimit}, Hour: ${config.hCount}/${config.hLimit})`);
                 return true;
             }
             log('Follow button not found');
@@ -412,23 +472,6 @@
             await delay(500);
 
             await resetLimits();
-            if (config.fToday >= config.fLimit) {
-                log(`Daily limit reached: ${config.fToday}/${config.fLimit}, waiting 24 hours`);
-                config.paused = true;
-                save();
-                updateUI();
-                setTimeout(() => {
-                    config.fToday = 0;
-                    config.dStart = getDayStart();
-                    config.paused = false;
-                    save();
-                    updateUI();
-                    log('Daily limit wait ended, resuming');
-                    if (!busy) scanFollow();
-                }, 24 * 3600000 - (Date.now() - config.dStart));
-                busy = false;
-                return;
-            }
             if (config.hCount >= config.hLimit) {
                 log(`Hourly limit reached: ${config.hCount}/${config.hLimit}, waiting 1 hour`);
                 config.paused = true;
@@ -465,9 +508,12 @@
                     }
                     if (cell.querySelector('button[data-testid*="-follow"]')) {
                         await scrollToCell(cell, 'top');
-                        await followUser(cell);
-                        await delay(config.followDelay);
-                        if (config.paused || config.fToday >= config.fLimit || config.hCount >= config.hLimit) {
+                        const followed = await followUser(cell);
+                        if (!followed) {
+                            busy = false;
+                            return;
+                        }
+                        if (config.paused || config.hCount >= config.hLimit) {
                             log('Paused or limit reached during follow');
                             busy = false;
                             return;
@@ -478,43 +524,25 @@
                     log('Profile limit reached, returning to homepage');
                     await goHome();
                     const arts = getValidTweets();
+                    tweetIndex++;
                     if (arts[tweetIndex]) {
-                        await scrollToTweet(arts[tweetIndex], 'bottom');
-                        tweetIndex++;
-                        if (arts[tweetIndex]) {
-                            const handle = arts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
-                            const prevHandle = lastHandle || 'unknown';
-                            if (handle === lastHandle) {
-                                log(`Duplicate handle detected at index ${tweetIndex} (handle: ${handle}), incrementing index`);
-                                tweetIndex++;
-                                if (arts[tweetIndex]) {
-                                    const newHandle = arts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
-                                    log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${newHandle}, prev handle: ${prevHandle})`);
-                                    await scrollToTweet(arts[tweetIndex], 'top');
-                                } else {
-                                    log('No tweets found after duplicate, scrolling down');
-                                    await scrollToTweet(null, 'top');
-                                    scrollAttempts++;
-                                }
-                            } else {
-                                log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${handle}, prev handle: ${prevHandle})`);
+                        const handle = arts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
+                        const prevHandle = lastHandle || 'unknown';
+                        if (handle === lastHandle) {
+                            log(`Duplicate handle detected at index ${tweetIndex} (handle: ${handle}), incrementing index`);
+                            tweetIndex++;
+                            if (arts[tweetIndex]) {
+                                const newHandle = arts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
+                                log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${newHandle}, prev handle: ${prevHandle})`);
                                 await scrollToTweet(arts[tweetIndex], 'top');
+                            } else {
+                                log('No tweets found after duplicate, scrolling down');
+                                await scrollToTweet(null, 'top');
+                                scrollAttempts++;
                             }
                         } else {
-                            log('No tweets found after returning to homepage, scrolling down');
-                            await scrollToTweet(null, 'top');
-                            scrollAttempts++;
-                            if (scrollAttempts >= maxScrollAttempts) {
-                                log('Max scroll attempts reached, resetting to first tweet');
-                                tweetIndex = 0;
-                                scrollAttempts = 0;
-                                const newArts = getValidTweets();
-                                if (newArts[tweetIndex]) {
-                                    const handle = newArts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
-                                    log(`Scrolling to first tweet at index ${tweetIndex} (handle: ${handle})`);
-                                    await scrollToTweet(newArts[tweetIndex], 'top');
-                                }
-                            }
+                            log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${handle}, prev handle: ${prevHandle})`);
+                            await scrollToTweet(arts[tweetIndex], 'top');
                         }
                     } else {
                         log('No tweets found after returning to homepage, scrolling down');
@@ -579,32 +607,25 @@
                         } else {
                             await goHome();
                             const newArts = getValidTweets();
+                            tweetIndex++;
                             if (newArts[tweetIndex]) {
-                                await scrollToTweet(newArts[tweetIndex], 'bottom');
-                                tweetIndex++;
-                                if (newArts[tweetIndex]) {
-                                    const newHandle = newArts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
-                                    const prevHandle = lastHandle || 'unknown';
-                                    if (newHandle === lastHandle && lastHandle !== null) {
-                                        log(`Duplicate handle detected at index ${tweetIndex} (handle: ${newHandle}), incrementing index`);
-                                        tweetIndex++;
-                                        if (newArts[tweetIndex]) {
-                                            const nextHandle = newArts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
-                                            log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${nextHandle}, prev handle: ${prevHandle})`);
-                                            await scrollToTweet(newArts[tweetIndex], 'top');
-                                        } else {
-                                            log('No tweets found after duplicate, scrolling down');
-                                            await scrollToTweet(null, 'top');
-                                            scrollAttempts++;
-                                        }
-                                    } else {
-                                        log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${newHandle}, prev handle: ${prevHandle})`);
+                                const newHandle = newArts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
+                                const prevHandle = lastHandle || 'unknown';
+                                if (newHandle === lastHandle && lastHandle !== null) {
+                                    log(`Duplicate handle detected at index ${tweetIndex} (handle: ${newHandle}), incrementing index`);
+                                    tweetIndex++;
+                                    if (newArts[tweetIndex]) {
+                                        const nextHandle = newArts[tweetIndex].querySelector('div[data-testid="User-Name"] a[href*="/"]')?.href.split('/').pop() || 'unknown';
+                                        log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${nextHandle}, prev handle: ${prevHandle})`);
                                         await scrollToTweet(newArts[tweetIndex], 'top');
+                                    } else {
+                                        log('No tweets found after duplicate, scrolling down');
+                                        await scrollToTweet(null, 'top');
+                                        scrollAttempts++;
                                     }
                                 } else {
-                                    log('No tweets found after navigation, scrolling down');
-                                    await scrollToTweet(null, 'top');
-                                    scrollAttempts++;
+                                    log(`Scrolling to next tweet at index ${tweetIndex} (handle: ${newHandle}, prev handle: ${prevHandle})`);
+                                    await scrollToTweet(newArts[tweetIndex], 'top');
                                 }
                             } else {
                                 log('No tweets found after navigation, scrolling down');
@@ -643,7 +664,6 @@
                     }
                 }
             }
-
             busy = false;
             timer = setTimeout(scanFollow, fDelay);
         } catch (e) {
